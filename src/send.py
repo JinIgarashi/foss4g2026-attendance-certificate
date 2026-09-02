@@ -38,6 +38,10 @@ Thank you for attending FOSS4G Hiroshima 2026 ({dates}).
 
 Please find your Certificate of Attendance attached to this email as a PDF.
 
+If you also need a certificate for a workshop you attended, please email
+{reply_to} with the name(s) of the workshop(s) you attended, and we will
+handle it individually.
+
 We hope you enjoyed the conference and look forward to seeing you again.
 
 Best regards,
@@ -112,7 +116,9 @@ def _build_message(
     message["To"] = recipient
     message["Reply-To"] = reply_to
     message["Subject"] = EMAIL_SUBJECT
-    message.set_content(EMAIL_BODY.format(name=name, dates=EVENT_DATES))
+    message.set_content(
+        EMAIL_BODY.format(name=name, dates=EVENT_DATES, reply_to=reply_to)
+    )
     message.add_attachment(
         pdf_path.read_bytes(),
         maintype="application",
