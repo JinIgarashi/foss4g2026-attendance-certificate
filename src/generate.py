@@ -43,7 +43,7 @@ from rich.progress import (  # noqa: E402
 console = Console()
 
 NAME_PLACEHOLDER = "{{ full_name }}"
-CHECKIN_COLUMN = "Check-ins: Conference checkin"
+CHECKIN_COLUMN = "Check-ins: Badgy"
 
 
 def _is_void(row: dict) -> bool:
@@ -53,8 +53,12 @@ def _is_void(row: dict) -> bool:
 
 
 def _checked_in(row: dict) -> bool:
-    """True when the attendee checked in at the conference."""
-    return (row.get(CHECKIN_COLUMN) or "").strip().lower() == "y"
+    """True when the attendee has a badge check-in recorded.
+
+    Tito records a count in this column when the badge was handed over on
+    site, so any non-empty value means the person actually attended.
+    """
+    return bool((row.get(CHECKIN_COLUMN) or "").strip())
 
 
 def _sanitize(value: str) -> str:

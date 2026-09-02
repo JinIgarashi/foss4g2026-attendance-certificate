@@ -19,7 +19,7 @@ from rich.progress import (
 
 # Reuse the exact skip rules and filename scheme used at generation time so the
 # PDF we look up here matches what `generate` wrote.
-from src.generate import _is_void, _sanitize
+from src.generate import _checked_in, _is_void, _sanitize
 
 load_dotenv()
 
@@ -131,6 +131,7 @@ def send_certificates(
     only: str | None,
     test_to: str | None,
     delay: float,
+    checkin_only: bool = True,
 ) -> None:
     """Email each attendee their certificate PDF as an attachment."""
     with csv_path.open(encoding="utf-8", newline="") as f:
@@ -144,6 +145,9 @@ def send_certificates(
     skipped = 0
     for row in rows:
         if _is_void(row):
+            skipped += 1
+            continue
+        if checkin_only and not _checked_in(row):
             skipped += 1
             continue
 

@@ -80,21 +80,22 @@ Options:
 | `--csv` | `assets/attendees.csv` | Attendee CSV (Tito export). |
 | `--template` | `assets/certificate-template.svg` | SVG template containing a `{{ full_name }}` placeholder. |
 | `--output-dir` | `outputs` | Directory to write generated PDFs into. |
-| `--checkin-only` | *off* | Only generate for attendees who checked in at the conference. |
+| `--checkin-only` / `--all-attendees` | `--checkin-only` | Only generate for attendees with a non-empty `Check-ins: Badgy` value (badge picked up on site). Pass `--all-attendees` for every non-void row. |
 
 Examples:
 
 ```bash
-# Generate for every non-void ticket
+# Only attendees who picked up their badge on site (default)
 uv run foss4gcert generate
 
-# Only attendees who checked in, into a custom directory
-uv run foss4gcert generate --checkin-only --output-dir build/certs
+# Every non-void ticket, into a custom directory
+uv run foss4gcert generate --all-attendees --output-dir build/certs
 ```
 
 Each PDF is named `<Ticket Reference>_<Ticket Full Name>.pdf`. Voided/refunded
-tickets are skipped, and a row missing a name or reference is reported and
-skipped without aborting the batch. A summary of generated / skipped / failed
+tickets and (by default) attendees without a badge check-in are skipped, and a
+row missing a name or reference is reported and skipped without aborting the
+batch. A summary of generated / skipped / failed
 counts is printed at the end.
 
 ### Send certificates
@@ -132,6 +133,7 @@ Options:
 | `--only` | – | Only send to the row whose `Ticket Email` matches. |
 | `--test-to` | – | Redirect every email to this test address (not logged as sent). |
 | `--limit` | – | Send to at most N recipients this run. |
+| `--checkin-only` / `--all-attendees` | `--checkin-only` | Only send to attendees with a non-empty `Check-ins: Badgy` value. Pass `--all-attendees` to send to every non-void row. |
 | `--delay` | `1.0` | Seconds to wait between sends (SMTP throttle). |
 
 Sent `Ticket Reference`s are recorded in `outputs/sent.log` and skipped on
@@ -155,8 +157,9 @@ Exported from Tito (~540 rows, one per ticket). Columns used by this project:
 - `Ticket Email` — delivery address for the certificate.
 - `Ticket Reference` — per-ticket unique id (e.g. `YFFI-1`), used in filenames.
 - `Void Status` — voided/refunded tickets are skipped.
-- `Check-ins: Conference checkin` — `Y` when the attendee checked in (used by
-  `--checkin-only`).
+- `Check-ins: Badgy` — badge pick-up count, recorded on site. Non-empty means
+  the person actually attended; this is the column `--checkin-only` uses. (The
+  `Check-ins: Conference checkin` column is empty in the export and unused.)
 
 Names with non-ASCII characters (e.g. `Narcélio de Sá`) are preserved as UTF-8
 throughout.

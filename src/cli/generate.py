@@ -31,10 +31,12 @@ from src.generate import CHECKIN_COLUMN, generate_certificates
     help="Directory to write generated PDFs into.",
 )
 @click.option(
-    "--checkin-only",
-    is_flag=True,
-    default=False,
-    help=f"Only generate certificates for attendees whose '{CHECKIN_COLUMN}' is 'Y'.",
+    "--checkin-only/--all-attendees",
+    default=True,
+    show_default=True,
+    help=f"Only generate certificates for attendees with a non-empty "
+    f"'{CHECKIN_COLUMN}' value (i.e. who picked up their badge on site). "
+    f"Use --all-attendees to generate for every non-void row.",
 )
 def generate(csv_path: Path, template: Path, output_dir: Path, checkin_only: bool):
     """Render one PDF certificate per attendee from the CSV."""
