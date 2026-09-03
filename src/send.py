@@ -46,10 +46,11 @@ If you also need a certificate for a workshop you attended, please email
 {reply_to} with the name(s) of the workshop(s) you attended, and we will
 handle it individually.
 
-We hope you enjoyed the conference and look forward to seeing you again.
+We hope you enjoyed the conference and look forward to seeing you in next
+FOSS4G conference.
 
 Best regards,
-The FOSS4G Hiroshima 2026 Organizing Committee
+The FOSS4G Hiroshima 2026 Local Organizing Committee
 """
 
 
