@@ -78,9 +78,17 @@ Options:
 | Option | Default | Description |
 | --- | --- | --- |
 | `--csv` | `assets/attendees.csv` | Attendee CSV (Tito export). |
-| `--template` | `assets/certificate-template.svg` | SVG template containing a `{{ full_name }}` placeholder. |
+| `--template` | `assets/certificate-template.svg` | SVG template containing `{{ full_name }}` and `{{ name_font_family }}` placeholders. |
 | `--output-dir` | `outputs` | Directory to write generated PDFs into. |
 | `--checkin-only` / `--all-attendees` | `--checkin-only` | Only generate for attendees with a non-empty `Check-ins: Badgy` value (badge picked up on site). Pass `--all-attendees` for every non-void row. |
+
+> **Fonts for non-Latin names.** cairosvg does no font fallback, so the name is
+> rendered in a single font family picked per attendee from `NAME_FONT_CANDIDATES`
+> in [`src/generate.py`](src/generate.py): Georgia for Latin names, then
+> `Hiragino Mincho ProN W6` (macOS) for Japanese, then `Arial Unicode MS`. Without
+> a covering font installed, those names render as empty boxes; on Linux install a
+> CJK serif (e.g. Noto Serif CJK JP) and add it to that list. The run prints a
+> warning for any name no candidate covers.
 
 Examples:
 

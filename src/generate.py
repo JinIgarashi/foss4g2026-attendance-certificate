@@ -4,6 +4,7 @@ import csv
 import os
 import re
 import sys
+from functools import lru_cache
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -30,6 +31,7 @@ def _ensure_cairo_on_path() -> None:
 
 _ensure_cairo_on_path()
 
+import cairocffi  # noqa: E402 - must follow _ensure_cairo_on_path()
 import cairosvg  # noqa: E402 - must follow _ensure_cairo_on_path()
 from rich.console import Console  # noqa: E402
 from rich.progress import (  # noqa: E402
@@ -43,7 +45,23 @@ from rich.progress import (  # noqa: E402
 console = Console()
 
 NAME_PLACEHOLDER = "{{ full_name }}"
+FONT_PLACEHOLDER = "{{ name_font_family }}"
 CHECKIN_COLUMN = "Check-ins: Badgy"
+
+# Font families tried, in order, for the attendee name. cairosvg does no font
+# fallback: it takes only the first family of a font-family list and hands it to
+# cairo's toy text API, which renders .notdef boxes ("tofu") for every character
+# that one font lacks. So we pick, per name, the first family that covers all of
+# its characters -- Latin names keep the certificate's Georgia look, and only
+# names that need it switch. The last entry is the catch-all.
+NAME_FONT_CANDIDATES = (
+    "Georgia",
+    # W6 is the bold weight: the plain family name resolves to W3, which
+    # looks noticeably lighter than the Georgia-Bold used for Latin names.
+    "Hiragino Mincho ProN W6",
+    "Hiragino Mincho ProN",
+    "Arial Unicode MS",
+)
 
 
 def _is_void(row: dict) -> bool:
@@ -59,6 +77,50 @@ def _checked_in(row: dict) -> bool:
     site, so any non-empty value means the person actually attended.
     """
     return bool((row.get(CHECKIN_COLUMN) or "").strip())
+
+
+def _normalize_name(name: str) -> str:
+    """Tidy a name for display: no ideographic spaces, no double spaces.
+
+    U+3000 (IDEOGRAPHIC SPACE) shows up in the Tito export between the parts of
+    some names. Georgia has no glyph for it, so leaving it in would push an
+    otherwise Latin name onto a CJK font; a plain space keeps it in Georgia.
+    """
+    return re.sub(r"\s+", " ", name.replace("\u3000", " ")).strip()
+
+
+@lru_cache(maxsize=None)
+def _scaled_font(family: str):
+    """The bold scaled font cairo resolves for `family`."""
+    surface = cairocffi.PDFSurface(None, 1, 1)
+    context = cairocffi.Context(surface)
+    context.select_font_face(
+        family, cairocffi.FONT_SLANT_NORMAL, cairocffi.FONT_WEIGHT_BOLD
+    )
+    return context.get_scaled_font()
+
+
+@lru_cache(maxsize=None)
+def _uncovered(family: str, text: str) -> str:
+    """The characters of `text` that `family` would render as .notdef boxes."""
+    glyphs, _clusters, _flags = _scaled_font(family).text_to_glyphs(0, 0, text, True)
+    # Each glyph is an (index, x, y) tuple, one per character for these simple
+    # strings; glyph index 0 is .notdef, i.e. tofu.
+    return "".join(char for char, (index, _x, _y) in zip(text, glyphs) if index == 0)
+
+
+def _font_family_for(name: str) -> str:
+    """First candidate family whose glyphs cover every character of `name`."""
+    for family in NAME_FONT_CANDIDATES:
+        if not _uncovered(family, name):
+            return family
+    fallback = NAME_FONT_CANDIDATES[-1]
+    console.print(
+        f"[yellow]No installed font covers "
+        f"'{_uncovered(fallback, name)}' in '{name}'; "
+        f"falling back to {fallback} (some characters will render as boxes)[/]"
+    )
+    return fallback
 
 
 def _sanitize(value: str) -> str:
@@ -86,7 +148,7 @@ def generate_certificates(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    generated = skipped = failed = 0
+    generated = skipped = failed = restyled = 0
 
     columns = (
         TextColumn("[progress.description]{task.description}"),
@@ -106,7 +168,7 @@ def generate_certificates(
                 skipped += 1
                 continue
 
-            name = (row.get("Ticket Full Name") or "").strip()
+            name = _normalize_name(row.get("Ticket Full Name") or "")
             reference = (row.get("Ticket Reference") or "").strip()
 
             if not name:
@@ -121,7 +183,12 @@ def generate_certificates(
                 console.print(f"[yellow]Skipping '{name}': empty Ticket Reference[/]")
                 continue
 
-            filled_svg = template_svg.replace(NAME_PLACEHOLDER, escape(name))
+            font_family = _font_family_for(name)
+            if font_family != NAME_FONT_CANDIDATES[0]:
+                restyled += 1
+            filled_svg = template_svg.replace(NAME_PLACEHOLDER, escape(name)).replace(
+                FONT_PLACEHOLDER, escape(font_family)
+            )
             out_path = output_dir / f"{_sanitize(reference)}_{_sanitize(name)}.pdf"
 
             try:
@@ -144,4 +211,9 @@ def generate_certificates(
         f"skipped=[yellow]{skipped}[/] failed=[red]{failed}[/] "
         f"(total rows: {len(rows)})"
     )
+    if restyled:
+        console.print(
+            f"{restyled} name(s) needed a non-default font "
+            f"(not {NAME_FONT_CANDIDATES[0]})"
+        )
     console.print(f"PDFs written to [bold]{output_dir}[/]")
