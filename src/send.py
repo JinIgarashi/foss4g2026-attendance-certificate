@@ -4,6 +4,7 @@ import csv
 import os
 import smtplib
 import time
+from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -27,7 +28,10 @@ console = Console()
 
 DEFAULT_REPLY_TO = "registration@foss4g.org"
 EVENT_DATES = "30 August – 5 September 2026"
-SENT_LOG_NAME = "sent.log"
+
+# Kept out of `outputs/` (hundreds of PDFs) so the log is easy to find.
+DEFAULT_SENT_LOG = Path("assets/sent.log")
+LOG_HEADER = ["timestamp", "reference", "name", "email", "pdf", "status", "error"]
 
 EMAIL_SUBJECT = "Your FOSS4G Hiroshima 2026 Certificate of Attendance"
 
@@ -93,14 +97,57 @@ def _fail(message: str) -> SystemExit:
 
 
 def _load_sent(sent_log: Path) -> set:
-    """References already sent in a previous run (for resume-safe re-runs)."""
+    """References already delivered in a previous run (for resume-safe re-runs).
+
+    Only `status=sent` rows count: `failed` and `test` rows are treated as not
+    yet delivered, so a re-run retries them.
+    """
     if not sent_log.exists():
         return set()
-    return {
-        line.strip()
-        for line in sent_log.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    }
+
+    sent = set()
+    with sent_log.open(encoding="utf-8", newline="") as f:
+        for row in csv.reader(f):
+            if not row or not row[0].strip():
+                continue
+            if row[0] == "timestamp":  # header
+                continue
+            if len(row) == 1:  # legacy format: bare reference per line
+                sent.add(row[0].strip())
+                continue
+            if len(row) >= 6 and row[5].strip() == "sent":
+                sent.add(row[1].strip())
+    return sent
+
+
+def _append_log(
+    sent_log: Path,
+    reference: str,
+    name: str,
+    address: str,
+    pdf_path: Path,
+    status: str,
+    error: str = "",
+) -> None:
+    """Append one result row, writing the header first if the file is new."""
+    new_file = not sent_log.exists()
+    if new_file:
+        sent_log.parent.mkdir(parents=True, exist_ok=True)
+    with sent_log.open("a", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        if new_file:
+            writer.writerow(LOG_HEADER)
+        writer.writerow(
+            [
+                datetime.now().isoformat(timespec="seconds"),
+                reference,
+                name,
+                address,
+                pdf_path.name,
+                status,
+                error,
+            ]
+        )
 
 
 def _build_message(
@@ -138,12 +185,12 @@ def send_certificates(
     test_to: str | None,
     delay: float,
     checkin_only: bool = True,
+    sent_log: Path = DEFAULT_SENT_LOG,
 ) -> None:
     """Email each attendee their certificate PDF as an attachment."""
     with csv_path.open(encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
 
-    sent_log = certificates_dir / SENT_LOG_NAME
     already_sent = _load_sent(sent_log)
 
     # First pass: resolve the recipients we will actually attempt this run.
@@ -196,6 +243,7 @@ def send_certificates(
         for reference, name, address, pdf_path in recipients:
             destination = test_to or address
             console.print(f"  {reference}  {name}  →  {destination}  [{pdf_path.name}]")
+        console.print(f"[dim]Results would be logged to {sent_log}[/]")
         return
 
     config = _load_smtp_config()
@@ -221,13 +269,27 @@ def send_certificates(
                 try:
                     _send_with_retry(smtp, message)
                     sent += 1
-                    if not test_to:
-                        with sent_log.open("a", encoding="utf-8") as log:
-                            log.write(f"{reference}\n")
+                    # `test` rows never block a later real send.
+                    status = "test" if test_to else "sent"
+                    _append_log(
+                        sent_log, reference, name, destination, pdf_path, status
+                    )
+                    progress.console.print(
+                        f"[green]✓[/] {reference}  {name}  →  {destination}"
+                    )
                 except Exception as exc:  # noqa: BLE001 - one failure must not abort the batch
                     failed += 1
-                    console.print(
-                        f"[red]Failed to send to {destination} "
+                    _append_log(
+                        sent_log,
+                        reference,
+                        name,
+                        destination,
+                        pdf_path,
+                        "failed",
+                        str(exc),
+                    )
+                    progress.console.print(
+                        f"[red]✗ Failed to send to {destination} "
                         f"({reference} / {name}): {exc}[/]"
                     )
                 time.sleep(delay)
@@ -237,9 +299,11 @@ def send_certificates(
         f"skipped=[yellow]{skipped}[/] failed=[red]{failed}[/] "
         f"(total rows: {len(rows)})"
     )
+    console.print(f"[dim]Log: {sent_log}[/]")
     if test_to:
         console.print(
-            f"[cyan]Test mode:[/] all mail sent to {test_to}; sent.log untouched."
+            f"[cyan]Test mode:[/] all mail sent to {test_to}; "
+            f"logged as status=test (does not block a later real send)."
         )
 
 

@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 
 from src.generate import CHECKIN_COLUMN
-from src.send import DEFAULT_REPLY_TO, send_certificates
+from src.send import DEFAULT_REPLY_TO, DEFAULT_SENT_LOG, send_certificates
 
 
 @click.command()
@@ -23,6 +23,14 @@ from src.send import DEFAULT_REPLY_TO, send_certificates
     default=Path("outputs"),
     show_default=True,
     help="Directory holding the generated PDF certificates.",
+)
+@click.option(
+    "--sent-log",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=DEFAULT_SENT_LOG,
+    show_default=True,
+    help="CSV log of send results (timestamp, reference, name, email, pdf, "
+    "status, error).",
 )
 @click.option(
     "--reply-to",
@@ -45,7 +53,7 @@ from src.send import DEFAULT_REPLY_TO, send_certificates
     "--test-to",
     default=None,
     help="Redirect every email to this test address (keeps each certificate; "
-    "does not touch sent.log).",
+    "logged as status=test, so it never blocks a later real send).",
 )
 @click.option(
     "--limit",
@@ -71,6 +79,7 @@ from src.send import DEFAULT_REPLY_TO, send_certificates
 def send(
     csv_path: Path,
     certificates_dir: Path,
+    sent_log: Path,
     reply_to: str,
     dry_run: bool,
     only: str | None,
@@ -90,4 +99,5 @@ def send(
         test_to=test_to,
         delay=delay,
         checkin_only=checkin_only,
+        sent_log=sent_log,
     )

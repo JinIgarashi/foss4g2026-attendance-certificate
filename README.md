@@ -139,13 +139,19 @@ Options:
 | `--reply-to` | `registration@foss4g.org` | Address for the Reply-To header. |
 | `--dry-run` / `--send` | `--dry-run` | Preview (default) vs. actually send. |
 | `--only` | – | Only send to the row whose `Ticket Email` matches. |
-| `--test-to` | – | Redirect every email to this test address (not logged as sent). |
+| `--test-to` | – | Redirect every email to this test address (logged as `status=test`). |
 | `--limit` | – | Send to at most N recipients this run. |
 | `--checkin-only` / `--all-attendees` | `--checkin-only` | Only send to attendees with a non-empty `Check-ins: Badgy` value. Pass `--all-attendees` to send to every non-void row. |
 | `--delay` | `1.0` | Seconds to wait between sends (SMTP throttle). |
+| `--sent-log` | `assets/sent.log` | CSV log of send results. |
 
-Sent `Ticket Reference`s are recorded in `outputs/sent.log` and skipped on
-re-run, so an interrupted or daily-capped batch resumes without double-sending.
+Every send attempt is recorded in `assets/sent.log`, a CSV with the columns
+`timestamp,reference,name,email,pdf,status,error` (`status` is `sent`, `failed`
+or `test`). Each result is also printed to the console as it happens.
+
+Only `status=sent` rows are skipped on re-run, so an interrupted or daily-capped
+batch resumes without double-sending, while `failed` and `test` rows are retried
+automatically. The log is git-ignored (it contains attendee email addresses).
 Gmail caps sends per day (~500 free / ~2000 Workspace); with ~540 attendees a
 free account may need two days — just re-run `--send` the next day.
 
